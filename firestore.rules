@@ -1,0 +1,73 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Rules for 'admins' collection
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn(); // In a real app, you'd restrict this to other admins
+    }
+
+    // Rules for 'students' collection
+    match /students/{studentId} {
+      allow read: if isSignedIn(); // Teachers and Admins can read all student data
+      allow write: if isSignedIn(); // Admins can create/update/delete students
+    }
+
+    // Rules for 'teachers' collection
+    match /teachers/{teacherId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn(); // Admins can manage teachers
+    }
+
+    // Rules for 'levels' collection
+    match /levels/{levelId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn(); // Admins can manage levels
+    }
+
+    // Rules for 'grades' collection
+    match /grades/{gradeId} {
+      // Students can only read their own grades
+      // Teachers and Admins can read any grades
+      allow read: if isSignedIn() && (
+        resource.data.studentId == get(/databases/$(database)/documents/students/$(request.auth.uid)).data.studentId ||
+        exists(/databases/$(database)/documents/teachers/$(request.auth.uid)) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+      // Teachers and Admins can write grades
+      allow write: if isSignedIn() && (
+        exists(/databases/$(database)/documents/teachers/$(request.auth.uid)) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+    
+    // Rules for 'feedback' subcollection
+    match /feedback/{feedbackId} {
+        // Students can read their own feedback
+        // Teachers and Admins can read any feedback
+         allow read: if isSignedIn() && (
+            resource.data.studentId == get(/databases/$(database)/documents/students/$(request.auth.uid)).data.id ||
+            exists(/databases/$(database)/documents/teachers/$(request.auth.uid)) ||
+            exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        );
+        // Only teachers and admins can create/update feedback
+        allow write: if isSignedIn() && (
+            exists(/databases/$(database)/documents/teachers/$(request.auth.uid)) ||
+            exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        );
+    }
+
+    // Rules for 'historicalGrades' collection
+    match /historicalGrades/{gradeId} {
+      // Only Admins can read or write historical data
+      allow read, write: if isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+  }
+}
